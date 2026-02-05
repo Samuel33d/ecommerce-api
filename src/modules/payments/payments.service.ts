@@ -44,8 +44,8 @@ export class PaymentsService {
       payment_method_types: ['card'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: `${process.env.STRIPE_SUCCESS_URL}&orderId=${order.id}`,
-      cancel_url: process.env.STRIPE_CANCEL_URL!,
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/orders?success=true&orderId=${order.id}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/cart?canceled=true`,
       customer_email: order.user.email,
       metadata: {
         orderId: order.id,
