@@ -11,11 +11,19 @@ async function bootstrap() {
   app.use(helmet());
 
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:3002',
-      process.env.FRONTEND_URL || '',
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+      const allowed = [
+        'http://localhost:3000',
+        'http://localhost:3002',
+        process.env.FRONTEND_URL || '',
+      ].filter(Boolean);
+
+      if (!origin || allowed.includes(origin) || origin.endsWith('.vercel.app')) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
     credentials: true,
   });
 
