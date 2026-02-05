@@ -11,6 +11,7 @@ import {
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { ReportQueryDto } from './dto/report-query.dto';
 import { JwtAuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -55,6 +56,13 @@ export class OrdersController {
   @Roles(Role.ADMIN)
   getStats() {
     return this.ordersService.getStats();
+  }
+
+  @Get('report')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  getReport(@Query() dto: ReportQueryDto) {
+    return this.ordersService.getReport(dto);
   }
 
   @Get(':id')

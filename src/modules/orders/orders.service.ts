@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { ReportQueryDto } from './dto/report-query.dto';
 import { OrderStatus, Prisma } from '@prisma/client';
 
 @Injectable()
@@ -232,6 +233,99 @@ export class OrdersService {
       totalProducts,
       totalCustomers,
       recentOrders,
+    };
+  }
+
+  async getReport(dto: ReportQueryDto) {
+    const startDate = new Date(dto.startDate);
+    const endDate = new Date(dto.endDate);
+    endDate.setHours(23, 59, 59, 999);
+
+    const dateFilter: Prisma.OrderWhereInput = {
+      createdAt: { gte: startDate, lte: endDate },
+    };
+
+    const [revenueAgg, totalOrders, orders] = await Promise.all([
+      this.prisma.order.aggregate({
+        where: { ...dateFilter, status: { not: OrderStatus.CANCELLED } },
+        _sum: { total: true },
+      }),
+      this.prisma.order.count({ where: dateFilter }),
+      this.prisma.order.findMany({
+        where: dateFilter,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+          items: {
+            include: { product: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const totalRevenue = revenueAgg._sum.total || 0;
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    // Aggregate orders by status
+    const statusGroups = await this.prisma.order.groupBy({
+      by: ['status'],
+      where: dateFilter,
+      _count: { id: true },
+      _sum: { total: true },
+    });
+
+    const ordersByStatus = statusGroups.map((g) => ({
+      status: g.status,
+      count: g._count.id,
+      revenue: g._sum.total || 0,
+    }));
+
+    // Top selling products
+    const orderItems = await this.prisma.orderItem.findMany({
+      where: { order: dateFilter },
+      include: { product: { select: { name: true } } },
+    });
+
+    const productMap = new Map<
+      string,
+      { name: string; totalQuantity: number; totalRevenue: number }
+    >();
+    for (const item of orderItems) {
+      const existing = productMap.get(item.productId);
+      if (existing) {
+        existing.totalQuantity += item.quantity;
+        existing.totalRevenue += item.price * item.quantity;
+      } else {
+        productMap.set(item.productId, {
+          name: item.product.name,
+          totalQuantity: item.quantity,
+          totalRevenue: item.price * item.quantity,
+        });
+      }
+    }
+
+    const topSellingProducts = Array.from(productMap.values())
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
+      .slice(0, 10);
+
+    return {
+      summary: {
+        totalRevenue,
+        totalOrders,
+        avgOrderValue,
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+      },
+      ordersByStatus,
+      topSellingProducts,
+      orders,
     };
   }
 }
